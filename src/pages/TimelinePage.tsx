@@ -1,5 +1,16 @@
-import { useEffect, useState } from 'react'
-import { Search, Route, X, Trash2, Clock, MapPin } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Search,
+  Route,
+  X,
+  Trash2,
+  Clock,
+  MapPin,
+  Armchair,
+  Umbrella,
+  ChevronDown,
+  Layers,
+} from 'lucide-react'
 import { useSceneStore } from '@/store/useSceneStore'
 import {
   formatTimestamp,
@@ -8,13 +19,15 @@ import {
   getTreeIcon,
   getPedestrianIcon,
 } from '@/utils/sceneHelpers'
+import { formatTripRange } from '@/utils/tripUtils'
 import type { WindowScene } from '@/types'
 
 export default function TimelinePage() {
-  const { routeNames, selectedRoute, currentRouteScenes, selectRoute, loadAll, deleteScene } =
+  const { routeNames, selectedRoute, visibleTrips, selectRoute, loadAll, deleteScene } =
     useSceneStore()
   const [search, setSearch] = useState('')
   const [detailScene, setDetailScene] = useState<WindowScene | null>(null)
+  const [expandedTripIds, setExpandedTripIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadAll()
@@ -24,9 +37,23 @@ export default function TimelinePage() {
     r.toLowerCase().includes(search.toLowerCase())
   )
 
-  const sorted = [...currentRouteScenes].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  )
+  // 全部行程里的“非雨转雨”记录 id，供行内与详情弹窗标记换景点
+  const weatherShiftIds = useMemo(() => {
+    const ids = new Set<string>()
+    visibleTrips.forEach((trip) =>
+      trip.weatherShiftSceneIds.forEach((id) => ids.add(id))
+    )
+    return ids
+  }, [visibleTrips])
+
+  const toggleTrip = (tripId: string) => {
+    setExpandedTripIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(tripId)) next.delete(tripId)
+      else next.add(tripId)
+      return next
+    })
+  }
 
   const handleDelete = (id: string) => {
     deleteScene(id)
@@ -79,7 +106,7 @@ export default function TimelinePage() {
           </div>
         </div>
 
-        {sorted.length === 0 ? (
+        {visibleTrips.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-mist-400">
             <div className="mb-4 text-6xl opacity-30">🪟</div>
             <p className="text-lg">
@@ -87,54 +114,114 @@ export default function TimelinePage() {
             </p>
           </div>
         ) : (
-          <div className="relative pl-8">
-            <div className="absolute left-3 top-0 bottom-0 w-px bg-teal-800" />
-            <div className="space-y-6">
-              {sorted.map((scene) => (
-                <div key={scene.id} className="relative flex gap-4">
-                  <div className="absolute -left-5 top-1 h-2.5 w-2.5 rounded-full bg-dusk-400 ring-4 ring-teal-950" />
-                  <div className="w-20 shrink-0 pt-0.5 text-right">
-                    <p className="text-xs text-dusk-400">
-                      {formatTimestamp(scene.timestamp)}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-mist-500">
-                      {getTimeOfDay(scene.timestamp)}
-                    </p>
-                  </div>
+          <div className="space-y-4">
+            {visibleTrips.map((trip) => {
+              const expanded = expandedTripIds.has(trip.id)
+              const hasShift = trip.weatherShiftSceneIds.length > 0
+              return (
+                <div
+                  key={trip.id}
+                  className="rounded-2xl border border-teal-800 bg-teal-900/40 overflow-hidden"
+                >
                   <button
-                    onClick={() => setDetailScene(scene)}
-                    className="group flex-1 rounded-xl border border-teal-800 bg-teal-900/50 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-dusk-400/40 hover:shadow-lg hover:shadow-dusk-400/10"
+                    onClick={() => toggleTrip(trip.id)}
+                    className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-teal-900/70"
                   >
-                    <div className="flex items-center gap-2 mb-2">
-                      {getWeatherIcon(scene.weather)}
-                      <span className="text-sm font-semibold text-mist-100">
-                        {scene.segment}
-                      </span>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-dusk-400/15">
+                      <Route className="w-5 h-5 text-dusk-400" />
                     </div>
-                    <div className="flex items-center gap-1 mb-1.5 text-mist-400">
-                      <MapPin className="w-3 h-3" />
-                      <span className="text-xs">{scene.routeName}</span>
-                      <span className="mx-1 text-teal-700">·</span>
-                      <span className="text-xs">{scene.seatDirection}侧</span>
-                    </div>
-                    {scene.note && (
-                      <p className="text-xs text-mist-400 line-clamp-2">
-                        {scene.note}
-                      </p>
-                    )}
-                    <div className="mt-2 flex items-center gap-2">
-                      {getTreeIcon(scene.treeDensity)}
-                      {getPedestrianIcon(scene.pedestrianStatus)}
-                      {scene.signText && (
-                        <span className="rounded bg-teal-800/60 px-1.5 py-0.5 text-[10px] text-mist-300">
-                          {scene.signText}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-mist-100">
+                          {trip.routeName}
                         </span>
-                      )}
+                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-800/70 px-2 py-0.5 text-[10px] text-mist-300">
+                          <Armchair className="w-3 h-3" />
+                          {trip.seatDirection}侧
+                        </span>
+                        {hasShift && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
+                            <Umbrella className="w-3 h-3" />
+                            遇雨换景 ×{trip.weatherShiftSceneIds.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-mist-400">
+                        <Clock className="w-3 h-3" />
+                        <span>{formatTripRange(trip.startTime, trip.endTime)}</span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-teal-800/60 px-2 py-1 text-[10px] text-mist-300">
+                        <Layers className="w-3 h-3" />
+                        {trip.scenes.length} 段
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-mist-400 transition-transform duration-200 ${
+                          expanded ? 'rotate-180' : ''
+                        }`}
+                      />
                     </div>
                   </button>
+
+                  {expanded && (
+                    <div className="relative ml-7 mr-4 mb-4 pl-6">
+                      <div className="absolute left-[7px] top-1 bottom-1 w-px bg-teal-800" />
+                      <div className="space-y-3">
+                        {trip.scenes.map((scene) => {
+                          const isWeatherShift = weatherShiftIds.has(scene.id)
+                          return (
+                            <div key={scene.id} className="relative">
+                              <div
+                                className={`absolute -left-[19px] top-3 h-2.5 w-2.5 rounded-full ring-4 ring-teal-950 ${
+                                  isWeatherShift ? 'bg-blue-400' : 'bg-dusk-400'
+                                }`}
+                              />
+                              <button
+                                onClick={() => setDetailScene(scene)}
+                                className="group w-full rounded-xl border border-teal-800 bg-teal-900/60 p-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-dusk-400/40 hover:shadow-lg hover:shadow-dusk-400/10"
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                  <div className="flex items-center gap-2">
+                                    {getWeatherIcon(scene.weather)}
+                                    <span className="text-sm font-semibold text-mist-100">
+                                      {scene.segment}
+                                    </span>
+                                  </div>
+                                  <span className="shrink-0 text-[11px] text-dusk-400">
+                                    {formatTimestamp(scene.timestamp).split(' ')[1]}
+                                  </span>
+                                </div>
+                                {isWeatherShift && (
+                                  <div className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
+                                    <Umbrella className="w-3 h-3" />
+                                    天气由非雨转雨，换景点
+                                  </div>
+                                )}
+                                {scene.note && (
+                                  <p className="text-xs text-mist-400 line-clamp-2">
+                                    {scene.note}
+                                  </p>
+                                )}
+                                <div className="mt-2 flex items-center gap-2">
+                                  {getTreeIcon(scene.treeDensity)}
+                                  {getPedestrianIcon(scene.pedestrianStatus)}
+                                  {scene.signText && (
+                                    <span className="rounded bg-teal-800/60 px-1.5 py-0.5 text-[10px] text-mist-300">
+                                      {scene.signText}
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -159,6 +246,13 @@ export default function TimelinePage() {
               {getWeatherIcon(detailScene.weather)}
               <h2 className="text-xl font-bold text-dusk-400">{detailScene.segment}</h2>
             </div>
+
+            {weatherShiftIds.has(detailScene.id) && (
+              <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 px-3 py-1 text-xs text-blue-300">
+                <Umbrella className="w-3.5 h-3.5" />
+                天气由非雨转雨，此处标记为换景点
+              </div>
+            )}
 
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 text-mist-300">

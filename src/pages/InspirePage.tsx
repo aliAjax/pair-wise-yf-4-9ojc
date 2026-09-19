@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSceneStore } from '@/store/useSceneStore'
 import {
   WRITING_PROMPTS,
@@ -8,14 +8,43 @@ import {
   formatTimestamp,
   getTimeOfDay,
 } from '@/utils/sceneHelpers'
-import { Lightbulb, RefreshCw, Quote, Bus, ArrowRight } from 'lucide-react'
+import { Lightbulb, RefreshCw, Quote, Bus, ArrowRight, Umbrella, Layers } from 'lucide-react'
 
 export default function InspirePage() {
-  const { randomScene, refreshRandom, loadAll, scenes } = useSceneStore()
+  const { randomScene, refreshRandom, loadAll, scenes, trips } = useSceneStore()
   const [revealed, setRevealed] = useState(false)
   const [displayedPrompt, setDisplayedPrompt] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [isSpinning, setIsSpinning] = useState(false)
+
+  useEffect(() => {
+    loadAll()
+  }, [loadAll])
+
+  // 灵感只从含两条及以上记录的行程里抽取
+  const hasEligibleTrip = useMemo(
+    () => trips.some((trip) => trip.scenes.length > 1),
+    [trips]
+  )
+
+  // 找到当前被抽中记录所属的行程（行程内为时间正序）
+  const randomTrip = useMemo(
+    () => trips.find((trip) => trip.scenes.some((s) => s.id === randomScene?.id)) ?? null,
+    [trips, randomScene]
+  )
+
+  const randomSceneIndex = useMemo(() => {
+    if (!randomTrip || !randomScene) return null
+    const chronological = [...randomTrip.scenes].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    )
+    return chronological.findIndex((s) => s.id === randomScene.id)
+  }, [randomTrip, randomScene])
+
+  const isWeatherShift =
+    randomTrip !== null &&
+    randomScene !== null &&
+    randomTrip.weatherShiftSceneIds.includes(randomScene.id)
 
   useEffect(() => {
     loadAll()
@@ -63,6 +92,18 @@ export default function InspirePage() {
         <Bus className="w-16 h-16 text-dusk-400/40 mb-6" />
         <p className="text-mist-100 text-lg font-serif mb-2">还没有窗景记录</p>
         <p className="text-mist-400 text-sm">先去记录一段窗景，才能在这里采集灵感</p>
+      </div>
+    )
+  }
+
+  if (!hasEligibleTrip) {
+    return (
+      <div className="min-h-screen bg-teal-950 flex flex-col items-center justify-center px-6 text-center">
+        <Layers className="w-16 h-16 text-dusk-400/40 mb-6" />
+        <p className="text-mist-100 text-lg font-serif mb-2">每个行程都只有一条记录</p>
+        <p className="text-mist-400 text-sm">
+          在同线路、同座位方向上间隔 20 分钟内再采一段窗景，灵感便会从完整行程中浮现
+        </p>
       </div>
     )
   }
@@ -119,6 +160,24 @@ export default function InspirePage() {
                 {getWeatherIcon(randomScene.weather)}
               </div>
             </div>
+
+            {(randomTrip || isWeatherShift) && (
+              <div className="flex flex-wrap items-center gap-2 -mt-2">
+                {randomTrip && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-dusk-400/10 text-mist-300 text-xs">
+                    <Layers className="w-3.5 h-3.5 text-dusk-400" />
+                    {randomTrip.routeName}·{randomTrip.seatDirection}侧行程
+                    {randomSceneIndex !== null && ` 第 ${randomSceneIndex + 1}/${randomTrip.scenes.length} 段`}
+                  </span>
+                )}
+                {isWeatherShift && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-300 text-xs">
+                    <Umbrella className="w-3.5 h-3.5" />
+                    非雨转雨 · 换景点
+                  </span>
+                )}
+              </div>
+            )}
 
             <p className="text-mist-100 font-serif text-xl leading-relaxed tracking-wide">
               {randomScene.note}
