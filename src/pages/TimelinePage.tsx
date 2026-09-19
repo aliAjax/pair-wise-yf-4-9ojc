@@ -1,20 +1,25 @@
 import { useEffect, useState } from 'react'
-import { Search, Route, X, Trash2, Clock, MapPin } from 'lucide-react'
+import {
+  Search, Route, X, Trash2, Clock, MapPin, ChevronDown, Armchair, CloudRain,
+} from 'lucide-react'
 import { useSceneStore } from '@/store/useSceneStore'
 import {
+  formatShortTime,
   formatTimestamp,
-  getTimeOfDay,
+  formatTripRange,
   getWeatherIcon,
   getTreeIcon,
   getPedestrianIcon,
 } from '@/utils/sceneHelpers'
-import type { WindowScene } from '@/types'
+import type { WindowScene, Trip } from '@/types'
 
 export default function TimelinePage() {
-  const { routeNames, selectedRoute, currentRouteScenes, selectRoute, loadAll, deleteScene } =
-    useSceneStore()
+  const {
+    trips, scenes, routeNames, selectedRoute, selectRoute, loadAll, deleteScene,
+  } = useSceneStore()
   const [search, setSearch] = useState('')
   const [detailScene, setDetailScene] = useState<WindowScene | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
     loadAll()
@@ -24,9 +29,29 @@ export default function TimelinePage() {
     r.toLowerCase().includes(search.toLowerCase())
   )
 
-  const sorted = [...currentRouteScenes].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  )
+  const visibleTrips: Trip[] = selectedRoute
+    ? trips.filter((t) => t.routeName === selectedRoute)
+    : trips
+
+  const scenesByTrip = new Map<string, WindowScene[]>()
+  for (const scene of scenes) {
+    if (selectedRoute && scene.routeName !== selectedRoute) continue
+    const list = scenesByTrip.get(scene.tripId) ?? []
+    list.push(scene)
+    scenesByTrip.set(scene.tripId, list)
+  }
+  for (const list of scenesByTrip.values()) {
+    list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  }
+
+  const toggleTrip = (tripId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(tripId)) next.delete(tripId)
+      else next.add(tripId)
+      return next
+    })
+  }
 
   const handleDelete = (id: string) => {
     deleteScene(id)
@@ -79,62 +104,110 @@ export default function TimelinePage() {
           </div>
         </div>
 
-        {sorted.length === 0 ? (
+        {visibleTrips.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-mist-400">
             <div className="mb-4 text-6xl opacity-30">🪟</div>
             <p className="text-lg">
-              {selectedRoute ? '该路线暂无窗景记录' : '选择一条路线，开始浏览窗景'}
+              {selectedRoute ? '该路线暂无窗景记录' : '还没有任何行程，去记录第一段窗景吧'}
             </p>
           </div>
         ) : (
-          <div className="relative pl-8">
-            <div className="absolute left-3 top-0 bottom-0 w-px bg-teal-800" />
-            <div className="space-y-6">
-              {sorted.map((scene) => (
-                <div key={scene.id} className="relative flex gap-4">
-                  <div className="absolute -left-5 top-1 h-2.5 w-2.5 rounded-full bg-dusk-400 ring-4 ring-teal-950" />
-                  <div className="w-20 shrink-0 pt-0.5 text-right">
-                    <p className="text-xs text-dusk-400">
-                      {formatTimestamp(scene.timestamp)}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-mist-500">
-                      {getTimeOfDay(scene.timestamp)}
-                    </p>
-                  </div>
+          <div className="space-y-4">
+            {visibleTrips.map((trip) => {
+              const tripScenes = scenesByTrip.get(trip.id) ?? []
+              const isCollapsed = collapsed.has(trip.id)
+              const rainyStart = tripScenes.some((s) => s.sceneryChange)
+              return (
+                <section
+                  key={trip.id}
+                  className="overflow-hidden rounded-xl border border-teal-800 bg-teal-900/40"
+                >
                   <button
-                    onClick={() => setDetailScene(scene)}
-                    className="group flex-1 rounded-xl border border-teal-800 bg-teal-900/50 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-dusk-400/40 hover:shadow-lg hover:shadow-dusk-400/10"
+                    onClick={() => toggleTrip(trip.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-teal-900/70"
                   >
-                    <div className="flex items-center gap-2 mb-2">
-                      {getWeatherIcon(scene.weather)}
-                      <span className="text-sm font-semibold text-mist-100">
-                        {scene.segment}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 mb-1.5 text-mist-400">
-                      <MapPin className="w-3 h-3" />
-                      <span className="text-xs">{scene.routeName}</span>
-                      <span className="mx-1 text-teal-700">·</span>
-                      <span className="text-xs">{scene.seatDirection}侧</span>
-                    </div>
-                    {scene.note && (
-                      <p className="text-xs text-mist-400 line-clamp-2">
-                        {scene.note}
-                      </p>
-                    )}
-                    <div className="mt-2 flex items-center gap-2">
-                      {getTreeIcon(scene.treeDensity)}
-                      {getPedestrianIcon(scene.pedestrianStatus)}
-                      {scene.signText && (
-                        <span className="rounded bg-teal-800/60 px-1.5 py-0.5 text-[10px] text-mist-300">
-                          {scene.signText}
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-mist-400 transition-transform duration-200 ${
+                        isCollapsed ? '-rotate-90' : ''
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 shrink-0 text-dusk-400" />
+                        <span className="truncate text-sm font-semibold text-mist-100">
+                          {trip.routeName}
                         </span>
-                      )}
+                        <span className="flex shrink-0 items-center gap-0.5 text-xs text-mist-400">
+                          <Armchair className="w-3 h-3" />
+                          {trip.seatDirection}侧
+                        </span>
+                        {rainyStart && (
+                          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
+                            <CloudRain className="w-3 h-3" />
+                            途中遇雨
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-mist-500">
+                        <Clock className="w-3 h-3" />
+                        {formatTripRange(trip.startTime, trip.endTime)}
+                      </div>
                     </div>
+                    <span className="shrink-0 rounded-full bg-teal-800/70 px-2.5 py-1 text-[10px] text-mist-300">
+                      {trip.sceneIds.length} 条采样
+                    </span>
                   </button>
-                </div>
-              ))}
-            </div>
+
+                  {!isCollapsed && (
+                    <div className="relative ml-6 border-l border-teal-800 pl-6 pr-4 pb-4">
+                      <div className="space-y-4 pt-1">
+                        {tripScenes.map((scene) => (
+                          <div key={scene.id} className="relative flex gap-4">
+                            <div className="absolute -left-[31px] top-1.5 h-2.5 w-2.5 rounded-full bg-dusk-400 ring-4 ring-teal-950" />
+                            <div className="w-12 shrink-0 pt-0.5 text-right">
+                              <p className="text-xs text-dusk-400">
+                                {formatShortTime(scene.timestamp)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setDetailScene(scene)}
+                              className="group flex-1 rounded-xl border border-teal-800 bg-teal-900/50 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-dusk-400/40 hover:shadow-lg hover:shadow-dusk-400/10"
+                            >
+                              <div className="mb-2 flex items-center gap-2">
+                                {getWeatherIcon(scene.weather)}
+                                <span className="text-sm font-semibold text-mist-100">
+                                  {scene.segment}
+                                </span>
+                                {scene.sceneryChange && (
+                                  <span className="flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
+                                    <CloudRain className="w-3 h-3" />
+                                    换景点 · 雨落
+                                  </span>
+                                )}
+                              </div>
+                              {scene.note && (
+                                <p className="line-clamp-2 text-xs text-mist-400">
+                                  {scene.note}
+                                </p>
+                              )}
+                              <div className="mt-2 flex items-center gap-2">
+                                {getTreeIcon(scene.treeDensity)}
+                                {getPedestrianIcon(scene.pedestrianStatus)}
+                                {scene.signText && (
+                                  <span className="rounded bg-teal-800/60 px-1.5 py-0.5 text-[10px] text-mist-300">
+                                    {scene.signText}
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )
+            })}
           </div>
         )}
       </div>
@@ -158,6 +231,12 @@ export default function TimelinePage() {
             <div className="mb-4 flex items-center gap-3">
               {getWeatherIcon(detailScene.weather)}
               <h2 className="text-xl font-bold text-dusk-400">{detailScene.segment}</h2>
+              {detailScene.sceneryChange && (
+                <span className="flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
+                  <CloudRain className="w-3 h-3" />
+                  换景点
+                </span>
+              )}
             </div>
 
             <div className="space-y-3 text-sm">
@@ -165,13 +244,12 @@ export default function TimelinePage() {
                 <MapPin className="w-4 h-4 text-dusk-400" />
                 <span>{detailScene.routeName}</span>
                 <span className="text-teal-600">·</span>
+                <Armchair className="w-3.5 h-3.5 text-dusk-400" />
                 <span>{detailScene.seatDirection}侧</span>
               </div>
               <div className="flex items-center gap-2 text-mist-300">
                 <Clock className="w-4 h-4 text-dusk-400" />
                 <span>{formatTimestamp(detailScene.timestamp)}</span>
-                <span className="text-teal-600">·</span>
-                <span>{getTimeOfDay(detailScene.timestamp)}</span>
               </div>
               <div className="flex items-center gap-3 text-mist-300">
                 {getTreeIcon(detailScene.treeDensity)}

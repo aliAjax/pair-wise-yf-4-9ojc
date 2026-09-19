@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSceneStore } from '@/store/useSceneStore'
 import {
   WRITING_PROMPTS,
@@ -8,7 +8,7 @@ import {
   formatTimestamp,
   getTimeOfDay,
 } from '@/utils/sceneHelpers'
-import { Lightbulb, RefreshCw, Quote, Bus, ArrowRight } from 'lucide-react'
+import { Lightbulb, RefreshCw, Quote, Bus, ArrowRight, CloudRain } from 'lucide-react'
 
 export default function InspirePage() {
   const { randomScene, refreshRandom, loadAll, scenes } = useSceneStore()
@@ -57,12 +57,33 @@ export default function InspirePage() {
     }, 400)
   }, [refreshRandom])
 
+  // 仅有一条记录的行程不参与灵感抽取
+  const multiSceneTripCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const scene of scenes) {
+      counts.set(scene.tripId, (counts.get(scene.tripId) ?? 0) + 1)
+    }
+    return Array.from(counts.values()).filter((n) => n > 1).length
+  }, [scenes])
+
   if (scenes.length === 0) {
     return (
       <div className="min-h-screen bg-teal-950 flex flex-col items-center justify-center px-6 text-center">
         <Bus className="w-16 h-16 text-dusk-400/40 mb-6" />
         <p className="text-mist-100 text-lg font-serif mb-2">还没有窗景记录</p>
         <p className="text-mist-400 text-sm">先去记录一段窗景，才能在这里采集灵感</p>
+      </div>
+    )
+  }
+
+  if (multiSceneTripCount === 0) {
+    return (
+      <div className="min-h-screen bg-teal-950 flex flex-col items-center justify-center px-6 text-center">
+        <Bus className="w-16 h-16 text-dusk-400/40 mb-6" />
+        <p className="text-mist-100 text-lg font-serif mb-2">每段行程都还只有一条采样</p>
+        <p className="text-mist-400 text-sm">
+          同线路、同方向、间隔二十分钟内再记一条，凑成一段旅程后再来采集灵感
+        </p>
       </div>
     )
   }
@@ -111,6 +132,12 @@ export default function InspirePage() {
                 <span className="text-mist-100 font-medium">{randomScene.routeName}</span>
                 <span className="text-mist-500">·</span>
                 <span>{randomScene.segment}</span>
+                {randomScene.sceneryChange && (
+                  <span className="flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
+                    <CloudRain className="w-3 h-3" />
+                    雨落换景点
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span>{getTimeOfDay(randomScene.timestamp)}</span>

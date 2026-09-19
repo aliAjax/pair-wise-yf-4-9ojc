@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { WindowScene, SceneFormData } from '@/types'
+import type { WindowScene, Trip, SceneFormData } from '@/types'
 import {
   getAllScenes,
+  getAllTrips,
   saveScene as storageSaveScene,
   deleteScene as storageDeleteScene,
   getScenesByRoute,
@@ -11,6 +12,7 @@ import {
 
 interface SceneState {
   scenes: WindowScene[]
+  trips: Trip[]
   routeNames: string[]
   currentRouteScenes: WindowScene[]
   selectedRoute: string
@@ -25,6 +27,7 @@ interface SceneState {
 
 export const useSceneStore = create<SceneState>((set) => ({
   scenes: [],
+  trips: [],
   routeNames: [],
   currentRouteScenes: [],
   selectedRoute: '',
@@ -32,34 +35,32 @@ export const useSceneStore = create<SceneState>((set) => ({
 
   loadAll: () => {
     const scenes = getAllScenes()
+    const trips = getAllTrips()
     const routeNames = getAllRouteNames()
-    set({ scenes, routeNames })
+    set({ scenes, trips, routeNames })
   },
 
   saveScene: (data: SceneFormData) => {
-    const scene: WindowScene = {
-      ...data,
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-    }
-    storageSaveScene(scene)
+    storageSaveScene(data)
     const scenes = getAllScenes()
+    const trips = getAllTrips()
     const routeNames = getAllRouteNames()
     set((state) => {
       const currentRouteScenes =
         state.selectedRoute ? getScenesByRoute(state.selectedRoute) : []
-      return { scenes, routeNames, currentRouteScenes }
+      return { scenes, trips, routeNames, currentRouteScenes }
     })
   },
 
   deleteScene: (id: string) => {
     storageDeleteScene(id)
     const scenes = getAllScenes()
+    const trips = getAllTrips()
     const routeNames = getAllRouteNames()
     set((state) => {
       const currentRouteScenes =
         state.selectedRoute ? getScenesByRoute(state.selectedRoute) : []
-      return { scenes, routeNames, currentRouteScenes }
+      return { scenes, trips, routeNames, currentRouteScenes }
     })
   },
 

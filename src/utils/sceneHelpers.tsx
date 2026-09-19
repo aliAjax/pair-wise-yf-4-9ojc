@@ -46,6 +46,24 @@ export function formatTimestamp(iso: string): string {
   return `${year}/${month}/${day} ${hour}:${minute}`
 }
 
+export function formatShortTime(iso: string): string {
+  const d = new Date(iso)
+  const hour = String(d.getHours()).padStart(2, '0')
+  const minute = String(d.getMinutes()).padStart(2, '0')
+  return `${hour}:${minute}`
+}
+
+/** 行程首末时间，跨日时附带日期 */
+export function formatTripRange(startIso: string, endIso: string): string {
+  const start = new Date(startIso)
+  const end = new Date(endIso)
+  const sameDay =
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate()
+  return `${formatTimestamp(startIso)} ~ ${sameDay ? formatShortTime(endIso) : formatTimestamp(endIso)}`
+}
+
 export function getTimeOfDay(iso: string): string {
   const h = new Date(iso).getHours()
   if (h < 6) return '深夜'
